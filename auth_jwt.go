@@ -151,6 +151,9 @@ type GinJWTMiddleware struct {
 
 	// CookieSameSite allow use http.SameSite cookie param
 	CookieSameSite http.SameSite
+
+	// User can define SendCookie func
+	SendCookieFunc func(c *gin.Context, name string, value string, maxAge int, path, domain string, secure, httpOnly bool)
 }
 
 var (
@@ -512,15 +515,28 @@ func (mw *GinJWTMiddleware) LoginHandler(c *gin.Context) {
 			c.SetSameSite(mw.CookieSameSite)
 		}
 
-		c.SetCookie(
-			mw.CookieName,
-			tokenString,
-			maxage,
-			"/",
-			mw.CookieDomain,
-			mw.SecureCookie,
-			mw.CookieHTTPOnly,
-		)
+		if mw.SendCookieFunc != nil {
+			mw.SendCookieFunc(
+				c,
+				mw.CookieName,
+				tokenString,
+				maxage,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		} else {
+			c.SetCookie(
+				mw.CookieName,
+				tokenString,
+				maxage,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		}
 	}
 
 	mw.LoginResponse(c, http.StatusOK, tokenString, expire)
@@ -534,15 +550,28 @@ func (mw *GinJWTMiddleware) LogoutHandler(c *gin.Context) {
 			c.SetSameSite(mw.CookieSameSite)
 		}
 
-		c.SetCookie(
-			mw.CookieName,
-			"",
-			-1,
-			"/",
-			mw.CookieDomain,
-			mw.SecureCookie,
-			mw.CookieHTTPOnly,
-		)
+		if mw.SendCookieFunc != nil {
+			mw.SendCookieFunc(
+				c,
+				mw.CookieName,
+				"",
+				-1,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		} else {
+			c.SetCookie(
+				mw.CookieName,
+				"",
+				-1,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		}
 	}
 
 	mw.LogoutResponse(c, http.StatusOK)
@@ -604,15 +633,28 @@ func (mw *GinJWTMiddleware) RefreshToken(c *gin.Context) (string, time.Time, err
 			c.SetSameSite(mw.CookieSameSite)
 		}
 
-		c.SetCookie(
-			mw.CookieName,
-			tokenString,
-			maxage,
-			"/",
-			mw.CookieDomain,
-			mw.SecureCookie,
-			mw.CookieHTTPOnly,
-		)
+		if mw.SendCookieFunc != nil {
+			mw.SendCookieFunc(
+				c,
+				mw.CookieName,
+				tokenString,
+				maxage,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		} else {
+			c.SetCookie(
+				mw.CookieName,
+				tokenString,
+				maxage,
+				"/",
+				mw.CookieDomain,
+				mw.SecureCookie,
+				mw.CookieHTTPOnly,
+			)
+		}
 	}
 
 	return tokenString, expire, nil
@@ -701,6 +743,21 @@ func (mw *GinJWTMiddleware) jwtFromCookie(c *gin.Context, key string) (string, e
 	return cookie, nil
 }
 
+func (mw *GinJWTMiddleware) jwtFromCookies(c *gin.Context, key ...string) (string, error) {
+	cookie := ""
+	for _, k := range key {
+		ck, _ := c.Cookie(k)
+		if ck == "" {
+			return "", ErrEmptyCookieToken
+		}
+		if cookie != "" {
+			cookie += "."
+		}
+		cookie += ck
+	}
+	return cookie, nil
+}
+
 func (mw *GinJWTMiddleware) jwtFromParam(c *gin.Context, key string) (string, error) {
 	token := c.Param(key)
 
@@ -731,6 +788,9 @@ func (mw *GinJWTMiddleware) ParseToken(c *gin.Context) (*jwt.Token, error) {
 			token, err = mw.jwtFromQuery(c, v)
 		case "cookie":
 			token, err = mw.jwtFromCookie(c, v)
+		case "cookies":
+			names := strings.Split(v, ".")
+			token, err = mw.jwtFromCookies(c, names...)
 		case "param":
 			token, err = mw.jwtFromParam(c, v)
 		}
